@@ -1,0 +1,235 @@
+from datetime import datetime, timedelta
+from app import db, login_manager
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+
+class User(UserMixin, db.Model):
+    __tablename__ = 'users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    username = db.Column(db.String(80), unique=True, nullable=True)
+    password_hash = db.Column(db.String(255), nullable=True)
+
+    # OAuth
+    oauth_provider = db.Column(db.String(20), nullable=True)  # 'google', 'apple', None
+    oauth_id = db.Column(db.String(200), nullable=True)
+
+    # Profile
+    first_name = db.Column(db.String(50), nullable=True)
+    last_name = db.Column(db.String(50), nullable=True)
+    avatar_url = db.Column(db.String(500), nullable=True)
+    default_currency = db.Column(db.String(3), default='EUR')  # Devise par défaut
+
+    # Subscription plan
+    plan_id = db.Column(db.Integer, db.ForeignKey('plans.id'), nullable=True)
+    plan = db.relationship('Plan', back_populates='users')
+
+    # Stripe
+    stripe_customer_id = db.Column(db.String(100), nullable=True)
+    stripe_subscription_id = db.Column(db.String(100), nullable=True)
+
+    # Dates
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
+
+    # Relations
+    subscriptions = db.relationship('Subscription', back_populates='user', lazy='dynamic',
+                                   cascade='all, delete-orphan')
+    notifications = db.relationship('Notification', back_populates='user', lazy='dynamic',
+                                   cascade='all, delete-orphan')
+    custom_categories = db.relationship('Category', back_populates='user', lazy='dynamic',
+                                       cascade='all, delete-orphan')
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        if not self.password_hash:
+            return False
+        return check_password_hash(self.password_hash, password)
+
+    def can_add_subscription(self):
+        """Vérifie si l'utilisateur peut ajouter un abonnement"""
+        if self.plan and self.plan.name == 'Premium':
+            return True
+        return self.subscriptions.filter_by(is_active=True).count() < 5
+
+    def is_premium(self):
+        """Vérifie si l'utilisateur a un plan Premium (mensuel ou annuel)"""
+        return self.plan and self.plan.is_premium()
+
+    def can_create_custom_category(self):
+        """Vérifie si l'utilisateur peut créer des catégories personnalisées (Premium uniquement)"""
+        return self.is_premium()
+
+    def get_active_subscriptions_count(self):
+        return self.subscriptions.filter_by(is_active=True).count()
+
+    def __repr__(self):
+        return f'<User {self.email}>'
+
+
+class Plan(db.Model):
+    __tablename__ = 'plans'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False, unique=True)  # 'Free', 'Premium', 'Premium Annual'
+    price = db.Column(db.Float, default=0.0)
+    currency = db.Column(db.String(3), default='EUR')
+    billing_period = db.Column(db.String(20), default='monthly')  # 'monthly', 'yearly', 'lifetime'
+    stripe_price_id = db.Column(db.String(100), nullable=True)
+    max_subscriptions = db.Column(db.Integer, nullable=True)  # None = illimité
+    description = db.Column(db.Text, nullable=True)
+    features = db.Column(db.JSON, nullable=True)  # Liste des fonctionnalités
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    users = db.relationship('User', back_populates='plan')
+
+    def is_premium(self):
+        """Vérifie si c'est un plan Premium (mensuel ou annuel)"""
+        return self.name in ['Premium', 'Premium Annual']
+
+    def __repr__(self):
+        return f'<Plan {self.name}>'
+
+
+class Category(db.Model):
+    __tablename__ = 'categories'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # NULL = catégorie globale
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    logo_url = db.Column(db.String(500), nullable=True)
+    website_url = db.Column(db.String(500), nullable=True)
+    color = db.Column(db.String(7), default='#6c757d')  # Couleur en hex
+    icon = db.Column(db.String(50), nullable=True)  # Font Awesome icon class
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relations
+    user = db.relationship('User', back_populates='custom_categories')
+    subscriptions = db.relationship('Subscription', back_populates='category', lazy='dynamic')
+
+    def is_global(self):
+        """Vérifie si c'est une catégorie globale (par défaut)"""
+        return self.user_id is None
+
+    def is_custom(self):
+        """Vérifie si c'est une catégorie personnalisée"""
+        return self.user_id is not None
+
+    def __repr__(self):
+        return f'<Category {self.name}>'
+
+
+class Subscription(db.Model):
+    __tablename__ = 'subscriptions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
+
+    # Informations de l'abonnement
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    amount = db.Column(db.Float, nullable=False)
+    currency = db.Column(db.String(3), default='EUR')
+
+    # Périodicité
+    billing_cycle = db.Column(db.String(20), nullable=False)  # 'weekly', 'monthly', 'quarterly', 'yearly'
+    start_date = db.Column(db.Date, nullable=False, default=datetime.utcnow)
+    next_billing_date = db.Column(db.Date, nullable=False)
+
+    # État
+    is_active = db.Column(db.Boolean, default=True)
+    auto_renew = db.Column(db.Boolean, default=True)
+
+    # Dates
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+
+    # Relations
+    user = db.relationship('User', back_populates='subscriptions')
+    category = db.relationship('Category', back_populates='subscriptions')
+    notifications = db.relationship('Notification', backref='subscription', cascade='all, delete-orphan')
+
+    def calculate_next_billing_date(self):
+        """Calcule la prochaine date de facturation"""
+        if self.billing_cycle == 'monthly':
+            return self.start_date + timedelta(days=30)
+        elif self.billing_cycle == 'quarterly':
+            return self.start_date + timedelta(days=90)
+        elif self.billing_cycle == 'yearly':
+            return self.start_date + timedelta(days=365)
+        elif self.billing_cycle == 'weekly':
+            return self.start_date + timedelta(days=7)
+        return self.start_date
+
+    def get_total_paid(self):
+        """Calcule le montant total payé depuis le début"""
+        if not self.is_active and self.cancelled_at:
+            end_date = self.cancelled_at
+        else:
+            end_date = datetime.utcnow()
+
+        days_elapsed = (end_date - self.created_at).days
+
+        if self.billing_cycle == 'monthly':
+            cycles = days_elapsed / 30
+        elif self.billing_cycle == 'quarterly':
+            cycles = days_elapsed / 90
+        elif self.billing_cycle == 'yearly':
+            cycles = days_elapsed / 365
+        elif self.billing_cycle == 'weekly':
+            cycles = days_elapsed / 7
+        else:
+            cycles = 0
+
+        return round(cycles * self.amount, 2)
+
+    def __repr__(self):
+        return f'<Subscription {self.name} - {self.user.email}>'
+
+
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    subscription_id = db.Column(db.Integer, db.ForeignKey('subscriptions.id'), nullable=True)
+
+    # Type de notification
+    type = db.Column(db.String(50), nullable=False)  # 'renewal', 'expiry', 'payment_failed', etc.
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+
+    # État
+    is_read = db.Column(db.Boolean, default=False)
+    is_sent = db.Column(db.Boolean, default=False)
+
+    # Dates
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    read_at = db.Column(db.DateTime, nullable=True)
+    sent_at = db.Column(db.DateTime, nullable=True)
+
+    # Relations
+    user = db.relationship('User', back_populates='notifications')
+
+    def mark_as_read(self):
+        self.is_read = True
+        self.read_at = datetime.utcnow()
+        db.session.commit()
+
+    def __repr__(self):
+        return f'<Notification {self.title} - {self.user.email}>'
