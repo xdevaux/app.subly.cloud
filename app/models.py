@@ -132,12 +132,81 @@ class Category(db.Model):
         return f'<Category {self.name}>'
 
 
+class Service(db.Model):
+    __tablename__ = 'services'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # NULL = service global
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
+
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    logo_url = db.Column(db.String(500), nullable=True)
+    website_url = db.Column(db.String(500), nullable=True)
+
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relations
+    user = db.relationship('User', backref='custom_services')
+    category = db.relationship('Category', backref='services')
+    plans = db.relationship('ServicePlan', back_populates='service', cascade='all, delete-orphan')
+    subscriptions = db.relationship('Subscription', back_populates='service')
+
+    def is_global(self):
+        """Vérifie si c'est un service global (par défaut)"""
+        return self.user_id is None
+
+    def is_custom(self):
+        """Vérifie si c'est un service personnalisé"""
+        return self.user_id is not None
+
+    def __repr__(self):
+        return f'<Service {self.name}>'
+
+
+class ServicePlan(db.Model):
+    __tablename__ = 'service_plans'
+
+    id = db.Column(db.Integer, primary_key=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('services.id'), nullable=False)
+
+    name = db.Column(db.String(100), nullable=False)  # Ex: "Standard", "Premium"
+    description = db.Column(db.Text, nullable=True)
+    amount = db.Column(db.Float, nullable=False)
+    currency = db.Column(db.String(3), default='EUR')
+    billing_cycle = db.Column(db.String(20), nullable=False)  # 'weekly', 'monthly', 'quarterly', 'yearly'
+
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relations
+    service = db.relationship('Service', back_populates='plans')
+
+    def to_dict(self):
+        """Convertit le plan en dictionnaire pour JSON"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'amount': self.amount,
+            'currency': self.currency,
+            'billing_cycle': self.billing_cycle,
+            'is_active': self.is_active
+        }
+
+    def __repr__(self):
+        return f'<ServicePlan {self.service.name} - {self.name}>'
+
+
 class Subscription(db.Model):
     __tablename__ = 'subscriptions'
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('services.id'), nullable=True)
+    plan_id = db.Column(db.Integer, db.ForeignKey('service_plans.id'), nullable=True)
 
     # Informations de l'abonnement
     name = db.Column(db.String(100), nullable=False)
@@ -162,6 +231,8 @@ class Subscription(db.Model):
     # Relations
     user = db.relationship('User', back_populates='subscriptions')
     category = db.relationship('Category', back_populates='subscriptions')
+    service = db.relationship('Service', back_populates='subscriptions')
+    plan = db.relationship('ServicePlan', backref='subscriptions')
     notifications = db.relationship('Notification', backref='subscription', cascade='all, delete-orphan')
 
     def calculate_next_billing_date(self):

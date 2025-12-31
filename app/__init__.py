@@ -20,12 +20,13 @@ def create_app(config_class=Config):
     login_manager.login_message = 'Veuillez vous connecter pour accéder à cette page.'
     login_manager.login_message_category = 'info'
 
-    from app.routes import auth, main, subscriptions, api, categories
+    from app.routes import auth, main, subscriptions, api, categories, services
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(subscriptions.bp)
     app.register_blueprint(api.bp)
     app.register_blueprint(categories.bp)
+    app.register_blueprint(services.bp)
 
     # Initialiser OAuth
     auth.init_oauth(app)

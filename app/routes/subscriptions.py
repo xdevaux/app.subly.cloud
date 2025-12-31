@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
 from app import db
-from app.models import Subscription, Category, Notification
+from app.models import Subscription, Category, Notification, Service
 from datetime import datetime, timedelta
 
 bp = Blueprint('subscriptions', __name__, url_prefix='/subscriptions')
@@ -17,6 +17,31 @@ def get_user_categories():
 
     # Combiner les deux listes
     return global_categories + custom_categories
+
+
+def get_user_services():
+    """Récupère les services globaux et personnalisés de l'utilisateur actuel avec plans sérialisables"""
+    # Services globaux (par défaut)
+    global_services = Service.query.filter_by(user_id=None, is_active=True).order_by(Service.name).all()
+
+    # Services personnalisés de l'utilisateur
+    custom_services = Service.query.filter_by(user_id=current_user.id, is_active=True).order_by(Service.name).all()
+
+    # Combiner les deux listes
+    all_services = global_services + custom_services
+
+    # Préparer les données pour le template (rendre les plans sérialisables)
+    services_data = []
+    for service in all_services:
+        service_dict = {
+            'id': service.id,
+            'name': service.name,
+            'category_id': service.category_id,
+            'plans': [plan.to_dict() for plan in service.plans if plan.is_active]
+        }
+        services_data.append(service_dict)
+
+    return services_data
 
 
 @bp.route('/')
@@ -63,6 +88,8 @@ def add():
         currency = request.form.get('currency', 'EUR')
         billing_cycle = request.form.get('billing_cycle')
         category_id = request.form.get('category_id', type=int)
+        service_id = request.form.get('service_id', type=int)
+        plan_id = request.form.get('plan_id', type=int)
         start_date_str = request.form.get('start_date')
 
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
@@ -75,6 +102,8 @@ def add():
             currency=currency,
             billing_cycle=billing_cycle,
             category_id=category_id if category_id else None,
+            service_id=service_id if service_id else None,
+            plan_id=plan_id if plan_id else None,
             start_date=start_date,
             next_billing_date=start_date
         )
@@ -107,7 +136,8 @@ def add():
         return redirect(url_for('subscriptions.list'))
 
     categories = get_user_categories()
-    return render_template('subscriptions/add.html', categories=categories)
+    services = get_user_services()
+    return render_template('subscriptions/add.html', categories=categories, services=services)
 
 
 @bp.route('/<int:subscription_id>/edit', methods=['GET', 'POST'])
@@ -126,6 +156,8 @@ def edit(subscription_id):
         subscription.currency = request.form.get('currency', 'EUR')
         subscription.billing_cycle = request.form.get('billing_cycle')
         subscription.category_id = request.form.get('category_id', type=int) or None
+        subscription.service_id = request.form.get('service_id', type=int) or None
+        subscription.plan_id = request.form.get('plan_id', type=int) or None
 
         db.session.commit()
 
@@ -133,9 +165,11 @@ def edit(subscription_id):
         return redirect(url_for('subscriptions.list'))
 
     categories = get_user_categories()
+    services = get_user_services()
     return render_template('subscriptions/edit.html',
                          subscription=subscription,
-                         categories=categories)
+                         categories=categories,
+                         services=services)
 
 
 @bp.route('/<int:subscription_id>/delete', methods=['POST'])

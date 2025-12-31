@@ -53,6 +53,7 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Nom</th>
+                                <th>Formule</th>
                                 <th>Catégorie</th>
                                 <th class="text-end">Montant</th>
                                 <th>Cycle</th>
@@ -68,6 +69,15 @@
                                         <strong>{{ sub.name }}</strong>
                                         {% if sub.description %}
                                             <br><small class="text-muted">{{ sub.description[:50] }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if sub.plan %}
+                                            <span class="badge bg-info">
+                                                {{ sub.plan.name }}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
                                         {% endif %}
                                     </td>
                                     <td>
@@ -119,7 +129,7 @@
                         </tbody>
                         <tfoot class="table-light">
                             <tr>
-                                <td colspan="2" class="text-end"><strong>Total :</strong></td>
+                                <td colspan="3" class="text-end"><strong>Total :</strong></td>
                                 <td class="text-end">
                                     <strong>
                                         {% set total_eur = namespace(value=0) %}

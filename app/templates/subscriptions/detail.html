@@ -23,6 +23,31 @@
                                     <td><strong>Nom :</strong></td>
                                     <td>{{ subscription.name }}</td>
                                 </tr>
+                                {% if subscription.service %}
+                                <tr>
+                                    <td><strong>Service :</strong></td>
+                                    <td>
+                                        <span class="badge bg-secondary">
+                                            <i class="fas fa-store"></i> {{ subscription.service.name }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% if subscription.plan %}
+                                <tr>
+                                    <td><strong>Formule :</strong></td>
+                                    <td>
+                                        <span class="badge bg-info">
+                                            {{ subscription.plan.name }}
+                                        </span>
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ subscription.plan.amount | format_amount }} {{ subscription.plan.currency | currency_symbol }}
+                                            / {{ subscription.plan.billing_cycle | translate_cycle }}
+                                        </small>
+                                    </td>
+                                </tr>
+                                {% endif %}
                                 <tr>
                                     <td><strong>Catégorie :</strong></td>
                                     <td>
@@ -113,13 +138,22 @@
                 </div>
             </div>
 
-            {% if subscription.category and subscription.category.website_url %}
+            {% if (subscription.service and subscription.service.website_url) or (subscription.category and subscription.category.website_url) %}
             <div class="card">
                 <div class="card-body">
                     <h5 class="mb-3">Liens utiles</h5>
-                    <a href="{{ subscription.category.website_url }}" target="_blank" class="btn btn-outline-primary">
-                        <i class="fas fa-external-link-alt"></i> Visiter le site web
-                    </a>
+                    <div class="d-flex gap-2">
+                        {% if subscription.service and subscription.service.website_url %}
+                        <a href="{{ subscription.service.website_url }}" target="_blank" class="btn btn-outline-primary">
+                            <i class="fas fa-external-link-alt"></i> Site web de {{ subscription.service.name }}
+                        </a>
+                        {% endif %}
+                        {% if subscription.category and subscription.category.website_url %}
+                        <a href="{{ subscription.category.website_url }}" target="_blank" class="btn btn-outline-secondary">
+                            <i class="fas fa-external-link-alt"></i> Site web de la catégorie
+                        </a>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
             {% endif %}
