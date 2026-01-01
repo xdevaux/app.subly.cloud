@@ -5,35 +5,61 @@
 {% block content %}
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="fas fa-tags"></i> Catégories</h2>
+        <div>
+            <h2><i class="fas fa-tags"></i> Catégories</h2>
+            {% if not current_user.is_premium() %}
+                <small class="text-muted">
+                    <i class="fas fa-info-circle"></i>
+                    {{ current_user.get_custom_categories_count() }}/5 catégories personnalisées utilisées
+                </small>
+            {% endif %}
+        </div>
         {% if current_user.can_create_custom_category() %}
             <a href="{{ url_for('categories.add') }}" class="btn btn-primary">
                 <i class="fas fa-plus"></i> Créer une catégorie
             </a>
         {% else %}
-            <a href="{{ url_for('main.pricing') }}" class="btn btn-warning">
-                <i class="fas fa-crown"></i> Passer à Premium pour créer vos catégories
-            </a>
+            <button class="btn btn-secondary" disabled title="Limite atteinte (5/5)">
+                <i class="fas fa-lock"></i> Limite atteinte
+            </button>
         {% endif %}
     </div>
 
     <!-- Message pour les utilisateurs gratuits -->
-    {% if not current_user.can_create_custom_category() and not custom_categories %}
-    <div class="alert alert-info border-0 shadow-sm mb-4">
-        <div class="row align-items-center">
-            <div class="col-md-8">
-                <h5 class="alert-heading"><i class="fas fa-crown text-warning"></i> Créez vos propres catégories avec Premium</h5>
-                <p class="mb-0">
-                    Avec le plan Premium, vous pouvez créer des catégories personnalisées avec logos, couleurs et icônes pour mieux organiser vos abonnements.
-                </p>
-            </div>
-            <div class="col-md-4 text-end">
-                <a href="{{ url_for('main.pricing') }}" class="btn btn-warning">
-                    <i class="fas fa-arrow-up"></i> Découvrir Premium
-                </a>
+    {% if not current_user.is_premium() %}
+        {% if not current_user.can_create_custom_category() %}
+        <div class="alert alert-warning border-0 shadow-sm mb-4">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h5 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> Limite atteinte</h5>
+                    <p class="mb-0">
+                        Vous avez atteint la limite de 5 catégories personnalisées pour le plan gratuit. Passez au plan Premium pour créer un nombre illimité de catégories.
+                    </p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <a href="{{ url_for('main.pricing') }}" class="btn btn-warning">
+                        <i class="fas fa-crown"></i> Passer à Premium
+                    </a>
+                </div>
             </div>
         </div>
-    </div>
+        {% elif custom_categories|length == 0 %}
+        <div class="alert alert-info border-0 shadow-sm mb-4">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h5 class="alert-heading"><i class="fas fa-info-circle"></i> Catégories personnalisées</h5>
+                    <p class="mb-0">
+                        Vous pouvez créer jusqu'à 5 catégories personnalisées avec le plan gratuit. Passez à Premium pour un nombre illimité.
+                    </p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <a href="{{ url_for('main.pricing') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-crown"></i> Découvrir Premium
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     {% endif %}
 
     <!-- Catégories personnalisées -->

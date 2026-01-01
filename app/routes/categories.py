@@ -34,10 +34,14 @@ def list():
 @login_required
 def add():
     """Ajouter une catégorie personnalisée"""
-    # Vérifier que l'utilisateur a le plan Premium
+    # Vérifier que l'utilisateur peut créer une catégorie
     if not current_user.can_create_custom_category():
-        flash('La création de catégories personnalisées est réservée aux utilisateurs Premium. Passez au plan Premium pour débloquer cette fonctionnalité.', 'warning')
-        return redirect(url_for('main.pricing'))
+        if current_user.is_premium():
+            flash('Vous avez atteint la limite de catégories personnalisées.', 'warning')
+        else:
+            count = current_user.get_custom_categories_count()
+            flash(f'Vous avez atteint la limite de 5 catégories personnalisées pour le plan gratuit ({count}/5). Passez au plan Premium pour créer un nombre illimité de catégories.', 'warning')
+        return redirect(url_for('categories.list'))
 
     if request.method == 'POST':
         name = request.form.get('name')

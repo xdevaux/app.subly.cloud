@@ -161,6 +161,14 @@
 
 {% block extra_js %}
 <script>
+// Fonction pour formater les montants au format français
+function formatAmount(amount) {
+    const formatted = amount.toFixed(2);
+    const parts = formatted.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.join(',');
+}
+
 // Graphique par catégorie
 {% if category_stats %}
 const categoryCtx = document.getElementById('categoryChart').getContext('2d');
@@ -187,7 +195,7 @@ new Chart(categoryCtx, {
                         if (label) {
                             label += ': ';
                         }
-                        label += context.parsed.toFixed(2) + '€';
+                        label += formatAmount(context.parsed) + ' €';
                         return label;
                     }
                 }
@@ -229,7 +237,7 @@ fetch('/api/stats')
                                 if (label) {
                                     label += ': ';
                                 }
-                                label += context.parsed.y.toFixed(2) + '€';
+                                label += formatAmount(context.parsed.y) + ' €';
                                 return label;
                             }
                         }
@@ -240,7 +248,7 @@ fetch('/api/stats')
                         beginAtZero: true,
                         ticks: {
                             callback: function(value) {
-                                return value.toFixed(2) + '€';
+                                return formatAmount(value) + ' €';
                             }
                         }
                     }

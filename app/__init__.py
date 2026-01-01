@@ -55,11 +55,18 @@ def create_app(config_class=Config):
 
     @app.template_filter('format_amount')
     def format_amount(amount):
-        """Formate un montant avec 2 décimales"""
+        """Formate un montant au format français (virgule pour décimales, espace pour milliers)"""
         try:
-            return f"{float(amount):.2f}"
+            value = float(amount)
+            # Formater avec 2 décimales
+            formatted = f"{value:,.2f}"
+            # Remplacer le séparateur de milliers par un espace
+            formatted = formatted.replace(',', ' ')
+            # Remplacer le point décimal par une virgule
+            formatted = formatted.replace('.', ',')
+            return formatted
         except (ValueError, TypeError):
-            return "0.00"
+            return "0,00"
 
     return app
 

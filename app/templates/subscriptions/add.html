@@ -119,6 +119,14 @@
 </div>
 
 <script>
+// Fonction pour formater les montants au format français
+function formatAmount(amount) {
+    const formatted = amount.toFixed(2);
+    const parts = formatted.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.join(',');
+}
+
 // Données des services avec leurs plans
 const servicesData = {{ services|tojson|safe }};
 console.log('Services data loaded:', servicesData);
@@ -187,7 +195,7 @@ function updateFromService() {
                 // Affichage avec traduction française
                 const currencySymbol = currencySymbols[plan.currency] || plan.currency;
                 const cycleLabel = cycleTranslations[plan.billing_cycle] || plan.billing_cycle;
-                option.textContent = `${plan.name} - ${plan.amount.toFixed(2)} ${currencySymbol} / ${cycleLabel}`;
+                option.textContent = `${plan.name} - ${formatAmount(plan.amount)} ${currencySymbol} / ${cycleLabel}`;
 
                 planSelect.appendChild(option);
                 activePlansCount++;

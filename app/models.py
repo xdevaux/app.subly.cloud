@@ -67,8 +67,47 @@ class User(UserMixin, db.Model):
         return self.plan and self.plan.is_premium()
 
     def can_create_custom_category(self):
-        """Vérifie si l'utilisateur peut créer des catégories personnalisées (Premium uniquement)"""
-        return self.is_premium()
+        """Vérifie si l'utilisateur peut créer des catégories personnalisées
+        - Gratuit : max 5 catégories
+        - Premium : illimité
+        """
+        if self.is_premium():
+            return True
+        return self.custom_categories.count() < 5
+
+    def can_create_custom_service(self):
+        """Vérifie si l'utilisateur peut créer des services personnalisés
+        - Gratuit : max 5 services
+        - Premium : illimité
+        """
+        if self.is_premium():
+            return True
+        from app.models import Service
+        return Service.query.filter_by(user_id=self.id).count() < 5
+
+    def can_create_custom_plan(self):
+        """Vérifie si l'utilisateur peut créer des plans personnalisés
+        - Gratuit : max 10 plans
+        - Premium : illimité
+        """
+        if self.is_premium():
+            return True
+        from app.models import ServicePlan
+        return ServicePlan.query.filter_by(user_id=self.id).count() < 10
+
+    def get_custom_categories_count(self):
+        """Retourne le nombre de catégories personnalisées créées"""
+        return self.custom_categories.count()
+
+    def get_custom_services_count(self):
+        """Retourne le nombre de services personnalisés créés"""
+        from app.models import Service
+        return Service.query.filter_by(user_id=self.id).count()
+
+    def get_custom_plans_count(self):
+        """Retourne le nombre de plans personnalisés créés"""
+        from app.models import ServicePlan
+        return ServicePlan.query.filter_by(user_id=self.id).count()
 
     def get_active_subscriptions_count(self):
         return self.subscriptions.filter_by(is_active=True).count()
@@ -170,6 +209,7 @@ class ServicePlan(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     service_id = db.Column(db.Integer, db.ForeignKey('services.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # NULL pour les plans globaux
 
     name = db.Column(db.String(100), nullable=False)  # Ex: "Standard", "Premium"
     description = db.Column(db.Text, nullable=True)
@@ -182,6 +222,11 @@ class ServicePlan(db.Model):
 
     # Relations
     service = db.relationship('Service', back_populates='plans')
+    user = db.relationship('User', backref='custom_plans')
+
+    def is_custom(self):
+        """Vérifie si le plan est personnalisé (créé par un utilisateur)"""
+        return self.user_id is not None
 
     def to_dict(self):
         """Convertit le plan en dictionnaire pour JSON"""

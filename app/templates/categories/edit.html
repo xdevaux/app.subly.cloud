@@ -40,13 +40,19 @@
 
                             <div class="col-md-6">
                                 <label for="icon" class="form-label">
-                                    Icône Font Awesome
-                                    <a href="https://fontawesome.com/icons" target="_blank" class="text-muted">
-                                        <i class="fas fa-external-link-alt"></i>
-                                    </a>
+                                    Icône
                                 </label>
-                                <input type="text" class="form-control" id="icon" name="icon"
-                                       value="{{ category.icon or '' }}" placeholder="fas fa-star">
+                                <input type="hidden" id="icon" name="icon" value="{{ category.icon or '' }}">
+                                <button type="button" class="btn btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#iconPickerModal">
+                                    {% if category.icon %}
+                                        <i class="{{ category.icon }}" id="selected-icon"></i>
+                                        <span id="selected-icon-text">{{ category.icon }}</span>
+                                    {% else %}
+                                        <i class="fas fa-tag" id="selected-icon"></i>
+                                        <span id="selected-icon-text">Choisir une icône</span>
+                                    {% endif %}
+                                </button>
+                                <small class="text-muted">Cliquez pour sélectionner une icône</small>
                             </div>
                         </div>
 
@@ -111,7 +117,129 @@
     </div>
 </div>
 
+<!-- Modal de sélection d'icône -->
+<div class="modal fade" id="iconPickerModal" tabindex="-1" aria-labelledby="iconPickerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="iconPickerModalLabel">Choisir une icône</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" class="form-control mb-3" id="icon-search" placeholder="Rechercher une icône...">
+                <div class="row g-2" id="icon-grid">
+                    <!-- Les icônes seront générées par JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+// Liste des icônes Font Awesome courantes
+const icons = [
+    // Général
+    'fas fa-star', 'fas fa-heart', 'fas fa-tag', 'fas fa-bookmark', 'fas fa-flag',
+    // Business
+    'fas fa-briefcase', 'fas fa-building', 'fas fa-chart-line', 'fas fa-dollar-sign', 'fas fa-coins',
+    // Technologie
+    'fas fa-laptop', 'fas fa-mobile-alt', 'fas fa-desktop', 'fas fa-server', 'fas fa-database',
+    'fas fa-code', 'fas fa-terminal', 'fas fa-microchip', 'fas fa-wifi', 'fas fa-cloud',
+    // Média
+    'fas fa-music', 'fas fa-film', 'fas fa-camera', 'fas fa-video', 'fas fa-headphones',
+    'fas fa-play-circle', 'fas fa-tv', 'fas fa-gamepad', 'fas fa-podcast', 'fas fa-photo-video',
+    // Shopping
+    'fas fa-shopping-cart', 'fas fa-shopping-bag', 'fas fa-credit-card', 'fas fa-receipt', 'fas fa-cash-register',
+    // Communication
+    'fas fa-envelope', 'fas fa-comment', 'fas fa-comments', 'fas fa-phone', 'fas fa-fax',
+    'fas fa-inbox', 'fas fa-paper-plane', 'fas fa-bell', 'fas fa-globe', 'fas fa-broadcast-tower',
+    // Education
+    'fas fa-book', 'fas fa-graduation-cap', 'fas fa-university', 'fas fa-pen', 'fas fa-pencil-alt',
+    'fas fa-ruler', 'fas fa-calculator', 'fas fa-flask', 'fas fa-atom', 'fas fa-microscope',
+    // Santé
+    'fas fa-heartbeat', 'fas fa-hospital', 'fas fa-stethoscope', 'fas fa-pills', 'fas fa-syringe',
+    'fas fa-dumbbell', 'fas fa-running', 'fas fa-bicycle', 'fas fa-apple-alt', 'fas fa-medkit',
+    // Transport
+    'fas fa-car', 'fas fa-bus', 'fas fa-train', 'fas fa-plane', 'fas fa-ship',
+    'fas fa-motorcycle', 'fas fa-truck', 'fas fa-taxi', 'fas fa-subway', 'fas fa-rocket',
+    // Maison
+    'fas fa-home', 'fas fa-key', 'fas fa-door-open', 'fas fa-couch', 'fas fa-bed',
+    'fas fa-utensils', 'fas fa-coffee', 'fas fa-pizza-slice', 'fas fa-blender', 'fas fa-lightbulb',
+    // Nature
+    'fas fa-tree', 'fas fa-leaf', 'fas fa-seedling', 'fas fa-sun', 'fas fa-moon',
+    'fas fa-cloud-sun', 'fas fa-rainbow', 'fas fa-paw', 'fas fa-dog', 'fas fa-cat',
+    // Outils
+    'fas fa-tools', 'fas fa-wrench', 'fas fa-hammer', 'fas fa-screwdriver', 'fas fa-cog',
+    'fas fa-cogs', 'fas fa-sliders-h', 'fas fa-paint-brush', 'fas fa-palette', 'fas fa-drafting-compass',
+    // Sport
+    'fas fa-football-ball', 'fas fa-basketball-ball', 'fas fa-baseball-ball', 'fas fa-volleyball-ball', 'fas fa-bowling-ball',
+    'fas fa-table-tennis', 'fas fa-hockey-puck', 'fas fa-golf-ball', 'fas fa-futbol', 'fas fa-trophy',
+    // Météo
+    'fas fa-snowflake', 'fas fa-cloud-rain', 'fas fa-bolt', 'fas fa-wind', 'fas fa-water',
+    // Symboles
+    'fas fa-crown', 'fas fa-gem', 'fas fa-gift', 'fas fa-award', 'fas fa-medal',
+    'fas fa-shield-alt', 'fas fa-lock', 'fas fa-unlock', 'fas fa-check-circle', 'fas fa-times-circle',
+    // Médias sociaux
+    'fab fa-facebook', 'fab fa-twitter', 'fab fa-instagram', 'fab fa-youtube', 'fab fa-linkedin',
+    'fab fa-github', 'fab fa-spotify', 'fab fa-netflix', 'fab fa-amazon', 'fab fa-google',
+    // Divers
+    'fas fa-user', 'fas fa-users', 'fas fa-user-tie', 'fas fa-baby', 'fas fa-child',
+    'fas fa-map-marker-alt', 'fas fa-compass', 'fas fa-calendar', 'fas fa-clock', 'fas fa-hourglass'
+];
+
+// Générer la grille d'icônes
+const iconGrid = document.getElementById('icon-grid');
+icons.forEach(iconClass => {
+    const col = document.createElement('div');
+    col.className = 'col-2 col-md-1';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-outline-secondary w-100 p-2 icon-btn';
+    btn.setAttribute('data-icon', iconClass);
+    btn.title = iconClass;
+
+    const icon = document.createElement('i');
+    icon.className = iconClass + ' fa-2x';
+
+    btn.appendChild(icon);
+    col.appendChild(btn);
+    iconGrid.appendChild(col);
+});
+
+// Recherche d'icônes
+const iconSearch = document.getElementById('icon-search');
+iconSearch.addEventListener('input', function() {
+    const searchTerm = this.value.toLowerCase();
+    const iconButtons = document.querySelectorAll('.icon-btn');
+
+    iconButtons.forEach(btn => {
+        const iconClass = btn.getAttribute('data-icon');
+        if (iconClass.toLowerCase().includes(searchTerm)) {
+            btn.parentElement.style.display = 'block';
+        } else {
+            btn.parentElement.style.display = 'none';
+        }
+    });
+});
+
+// Sélection d'icône
+document.querySelectorAll('.icon-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const iconClass = this.getAttribute('data-icon');
+        document.getElementById('icon').value = iconClass;
+        document.getElementById('selected-icon').className = iconClass;
+        document.getElementById('selected-icon-text').textContent = ' ' + iconClass;
+
+        // Fermer la modale
+        const modal = bootstrap.Modal.getInstance(document.getElementById('iconPickerModal'));
+        modal.hide();
+
+        // Mettre à jour la prévisualisation
+        previewIcon.className = iconClass + ' fa-2x';
+    });
+});
+
 // Prévisualisation en temps réel
 const nameInput = document.getElementById('name');
 const colorInput = document.getElementById('color');
@@ -141,11 +269,6 @@ colorTextInput.addEventListener('input', () => {
         previewIconContainer.style.borderColor = color;
         previewIconContainer.style.backgroundColor = color + '20';
     }
-});
-
-iconInput.addEventListener('input', () => {
-    const iconClass = iconInput.value || 'fas fa-tag';
-    previewIcon.className = iconClass + ' fa-2x';
 });
 </script>
 {% endblock %}
