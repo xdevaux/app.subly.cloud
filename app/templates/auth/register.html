@@ -37,12 +37,40 @@
                             <input type="password" class="form-control" id="password_confirm" name="password_confirm" required>
                         </div>
 
+                        <div class="mb-3">
+                            <label for="default_currency" class="form-label">Devise par défaut</label>
+                            <select class="form-select" id="default_currency" name="default_currency" required>
+                                <option value="EUR" selected>EUR (€) - Euro</option>
+                                <option value="USD">USD ($) - Dollar américain</option>
+                                <option value="GBP">GBP (£) - Livre sterling</option>
+                                <option value="CHF">CHF (CHF) - Franc suisse</option>
+                                <option value="CAD">CAD ($) - Dollar canadien</option>
+                                <option value="AUD">AUD ($) - Dollar australien</option>
+                                <option value="JPY">JPY (¥) - Yen japonais</option>
+                                <option value="CNY">CNY (¥) - Yuan chinois</option>
+                                <option value="INR">INR (₹) - Roupie indienne</option>
+                                <option value="BRL">BRL (R$) - Real brésilien</option>
+                                <option value="MXN">MXN ($) - Peso mexicain</option>
+                                <option value="ZAR">ZAR (R) - Rand sud-africain</option>
+                            </select>
+                            <small class="text-muted">Cette devise sera utilisée pour vos abonnements et factures</small>
+                        </div>
+
+                        {% if not request.args.get('plan') %}
                         <div class="alert alert-info">
                             <small>
                                 <i class="fas fa-info-circle"></i>
                                 En vous inscrivant, vous bénéficiez du plan gratuit avec jusqu'à 5 abonnements.
                             </small>
                         </div>
+                        {% else %}
+                        <div class="alert alert-success">
+                            <small>
+                                <i class="fas fa-crown"></i>
+                                Vous vous inscrivez pour le plan <strong>{% if request.args.get('plan') == 'premium' %}Premium{% else %}Premium Annuel{% endif %}</strong>. Après validation de votre compte, vous pourrez finaliser votre paiement.
+                            </small>
+                        </div>
+                        {% endif %}
 
                         <button type="submit" class="btn btn-primary w-100 mb-3">
                             <i class="fas fa-user-plus"></i> Créer mon compte

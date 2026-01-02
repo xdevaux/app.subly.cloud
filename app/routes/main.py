@@ -1,9 +1,11 @@
-from flask import Blueprint, render_template, redirect, url_for
+from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app
 from flask_login import login_required, current_user
 from app import db
 from app.models import Subscription, Category, Plan, Notification
 from datetime import datetime, timedelta
 from sqlalchemy import func
+import stripe
+import os
 
 bp = Blueprint('main', __name__)
 
@@ -80,3 +82,49 @@ def mark_notification_read(notification_id):
 
     notification.mark_as_read()
     return redirect(url_for('main.notifications'))
+
+
+@bp.route('/checkout-redirect')
+@login_required
+def checkout_redirect():
+    """Redirige vers Stripe Checkout pour finaliser un paiement Premium"""
+    plan_type = request.args.get('plan', 'monthly')  # 'monthly' ou 'yearly'
+
+    try:
+        # Initialiser Stripe
+        stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+
+        # Sélectionner le bon plan
+        if plan_type == 'yearly':
+            plan_name = 'Premium Annual'
+        else:
+            plan_name = 'Premium'
+
+        premium_plan = Plan.query.filter_by(name=plan_name).first()
+        if not premium_plan or not premium_plan.stripe_price_id:
+            flash(f'Plan {plan_name} non configuré. Veuillez contacter le support.', 'danger')
+            return redirect(url_for('main.pricing'))
+
+        # Créer la session Stripe Checkout
+        checkout_session = stripe.checkout.Session.create(
+            customer_email=current_user.email,
+            payment_method_types=['card'],
+            line_items=[{
+                'price': premium_plan.stripe_price_id,
+                'quantity': 1,
+            }],
+            mode='subscription',
+            success_url=url_for('api.checkout_success', _external=True) + '?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url=url_for('main.pricing', _external=True),
+            metadata={
+                'user_id': current_user.id,
+                'plan_type': plan_type
+            }
+        )
+
+        return redirect(checkout_session.url)
+
+    except Exception as e:
+        current_app.logger.error(f'Erreur lors de la création de la session Stripe: {str(e)}')
+        flash('Erreur lors de la redirection vers le paiement. Veuillez réessayer.', 'danger')
+        return redirect(url_for('main.pricing'))

@@ -152,7 +152,7 @@
                             </button>
                         {% endif %}
                     {% else %}
-                        <a href="{{ url_for('auth.register') }}" class="btn btn-primary w-100">
+                        <a href="{{ url_for('auth.register', plan='premium') }}" class="btn btn-primary w-100">
                             Commencer avec Premium
                         </a>
                     {% endif %}
@@ -239,7 +239,7 @@
                             </button>
                         {% endif %}
                     {% else %}
-                        <a href="{{ url_for('auth.register') }}" class="btn btn-warning w-100">
+                        <a href="{{ url_for('auth.register', plan='premium-annual') }}" class="btn btn-warning w-100">
                             Commencer avec Premium Annuel
                         </a>
                     {% endif %}

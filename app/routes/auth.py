@@ -47,6 +47,13 @@ def login():
             return redirect(url_for('auth.login'))
 
         login_user(user, remember=remember)
+
+        # Vérifier s'il y a un plan premium en attente (après inscription)
+        if 'pending_premium_plan' in session:
+            pending_plan = session.pop('pending_premium_plan')
+            flash(f'Bienvenue {user.first_name or user.email} ! Finalisez maintenant votre paiement pour activer votre plan Premium.', 'success')
+            return redirect(url_for('main.checkout_redirect', plan=pending_plan))
+
         next_page = request.args.get('next')
         if not next_page or urlparse(next_page).netloc != '':
             next_page = url_for('main.dashboard')
@@ -68,6 +75,11 @@ def register():
         password_confirm = request.form.get('password_confirm')
         first_name = request.form.get('first_name')
         last_name = request.form.get('last_name')
+        default_currency = request.form.get('default_currency', 'EUR')
+
+        # Vérifier si l'utilisateur s'inscrit pour un plan Premium
+        plan_param = request.args.get('plan', '')
+        is_premium_signup = plan_param in ['premium', 'premium-annual']
 
         if password != password_confirm:
             flash('Les mots de passe ne correspondent pas.', 'danger')
@@ -91,12 +103,16 @@ def register():
             db.session.add(free_plan)
             db.session.commit()
 
+        # Si inscription Premium directe, ne pas activer la période d'essai
+        trial_start = None if is_premium_signup else datetime.utcnow()
+
         user = User(
             email=email,
             first_name=first_name,
             last_name=last_name,
+            default_currency=default_currency,
             plan=free_plan,
-            trial_start_date=datetime.utcnow()  # Activer la période d'essai Premium de 7 jours
+            trial_start_date=trial_start  # Pas d'essai si inscription Premium directe
         )
         user.set_password(password)
 
@@ -108,7 +124,14 @@ def register():
         send_verification_email(user)
         db.session.commit()
 
-        flash('Votre compte a été créé avec succès ! Un email de confirmation a été envoyé à votre adresse. Vous bénéficiez de 7 jours d\'essai Premium gratuit.', 'success')
+        # Message de confirmation adapté selon le type d'inscription
+        if is_premium_signup:
+            # Stocker le plan choisi dans la session pour rediriger après connexion
+            session['pending_premium_plan'] = 'yearly' if plan_param == 'premium-annual' else 'monthly'
+            flash('Votre compte a été créé avec succès ! Un email de confirmation a été envoyé à votre adresse. Vous pourrez finaliser votre paiement Premium après avoir vérifié votre email.', 'success')
+        else:
+            flash('Votre compte a été créé avec succès ! Un email de confirmation a été envoyé à votre adresse. Vous bénéficiez de 7 jours d\'essai Premium gratuit.', 'success')
+
         return redirect(url_for('auth.login'))
 
     return render_template('auth/register.html')
@@ -148,6 +171,7 @@ def google_callback():
                     avatar_url=user_info.get('picture'),
                     oauth_provider='google',
                     oauth_id=user_info.get('sub'),
+                    default_currency='EUR',  # Devise par défaut pour OAuth (peut être modifiée dans le profil)
                     plan=free_plan,
                     trial_start_date=datetime.utcnow()  # Activer la période d'essai Premium de 7 jours
                 )
@@ -253,42 +277,40 @@ def resend_verification():
     return redirect(url_for('main.dashboard'))
 
 
-@bp.route('/cancel-plan', methods=['POST'])
+@bp.route('/downgrade-to-free', methods=['POST'])
 @login_required
-def cancel_plan():
-    """Annule le plan de l'utilisateur à la fin de la période actuelle"""
+def downgrade_to_free():
+    """Rétrograde immédiatement l'utilisateur vers le plan gratuit"""
     if not current_user.plan or current_user.plan.name == 'Free':
         flash('Vous êtes déjà sur le plan gratuit.', 'info')
         return redirect(url_for('auth.profile'))
 
-    # Calculer la date de fin de période (30 jours à partir d'aujourd'hui par défaut)
-    # Dans un vrai système avec Stripe, cette date viendrait de l'API Stripe
-    if current_user.plan.billing_period == 'yearly':
-        period_end = datetime.utcnow() + timedelta(days=365)
-    else:
-        period_end = datetime.utcnow() + timedelta(days=30)
-
-    current_user.plan_cancel_at_period_end = True
-    current_user.plan_period_end_date = period_end
-
-    db.session.commit()
-
-    flash(f'Votre plan sera annulé le {period_end.strftime("%d/%m/%Y")}. Vous conserverez l\'accès Premium jusqu\'à cette date.', 'warning')
-    return redirect(url_for('auth.profile'))
-
-
-@bp.route('/reactivate-plan', methods=['POST'])
-@login_required
-def reactivate_plan():
-    """Réactive le plan de l'utilisateur si l'annulation était programmée"""
-    if not current_user.plan_cancel_at_period_end:
-        flash('Votre plan n\'est pas programmé pour être annulé.', 'info')
+    # Récupérer le plan gratuit
+    free_plan = Plan.query.filter_by(name='Free').first()
+    if not free_plan:
+        flash('Erreur: Le plan gratuit n\'existe pas.', 'danger')
         return redirect(url_for('auth.profile'))
 
-    current_user.plan_cancel_at_period_end = False
-    current_user.plan_period_end_date = None
+    # Sauvegarder le nom de l'ancien plan pour le message et l'email
+    old_plan_name = current_user.plan.name
 
+    # Rétrograder immédiatement
+    current_user.plan = free_plan
+
+    # Créer une notification
+    from app.models import Notification
+    notification = Notification(
+        user_id=current_user.id,
+        type='downgrade',
+        title='Rétrogradation confirmée',
+        message=f'Vous avez été rétrogradé du plan {old_plan_name} vers le plan gratuit.'
+    )
+    db.session.add(notification)
     db.session.commit()
 
-    flash('Votre plan a été réactivé avec succès ! L\'annulation a été annulée.', 'success')
+    # Envoyer l'email de confirmation
+    from app.utils.email import send_plan_downgrade_email
+    send_plan_downgrade_email(current_user, old_plan_name)
+
+    flash(f'Vous avez été rétrogradé du plan {old_plan_name} vers le plan gratuit avec succès. Un email de confirmation vous a été envoyé.', 'success')
     return redirect(url_for('auth.profile'))

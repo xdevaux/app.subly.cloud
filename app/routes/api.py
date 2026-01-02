@@ -18,9 +18,19 @@ def create_checkout_session():
     try:
         init_stripe()
 
-        premium_plan = Plan.query.filter_by(name='Premium').first()
+        # Récupérer le plan demandé (monthly par défaut, ou yearly)
+        data = request.get_json() or {}
+        plan_type = data.get('plan', 'monthly')  # 'monthly' ou 'yearly'
+
+        # Sélectionner le bon plan
+        if plan_type == 'yearly':
+            plan_name = 'Premium Annual'
+        else:
+            plan_name = 'Premium'
+
+        premium_plan = Plan.query.filter_by(name=plan_name).first()
         if not premium_plan or not premium_plan.stripe_price_id:
-            return jsonify({'error': 'Plan Premium non configuré'}), 400
+            return jsonify({'error': f'Plan {plan_name} non configuré'}), 400
 
         checkout_session = stripe.checkout.Session.create(
             customer_email=current_user.email,
@@ -33,7 +43,8 @@ def create_checkout_session():
             success_url=url_for('api.checkout_success', _external=True) + '?session_id={CHECKOUT_SESSION_ID}',
             cancel_url=url_for('main.pricing', _external=True),
             metadata={
-                'user_id': current_user.id
+                'user_id': current_user.id,
+                'plan_type': plan_type
             }
         )
 
@@ -69,6 +80,19 @@ def checkout_success():
                 )
                 db.session.add(notification)
                 db.session.commit()
+
+                # Envoyer l'email de confirmation
+                from app.utils.email import send_plan_upgrade_email
+                send_plan_upgrade_email(current_user, premium_plan.name)
+
+                # Récupérer et envoyer la facture
+                try:
+                    subscription_obj = stripe.Subscription.retrieve(session.subscription)
+                    if subscription_obj.latest_invoice:
+                        from app.utils.email import send_invoice_email
+                        send_invoice_email(current_user, subscription_obj.latest_invoice)
+                except Exception as e:
+                    current_app.logger.error(f'Erreur lors de l\'envoi de la facture: {str(e)}')
 
                 return redirect(url_for('main.dashboard'))
 
@@ -122,6 +146,10 @@ def stripe_webhook():
         subscription = event['data']['object']
         handle_subscription_deleted(subscription)
 
+    elif event['type'] == 'invoice.payment_succeeded':
+        invoice = event['data']['object']
+        handle_invoice_payment_succeeded(invoice)
+
     elif event['type'] == 'invoice.payment_failed':
         invoice = event['data']['object']
         handle_payment_failed(invoice)
@@ -133,14 +161,36 @@ def handle_subscription_updated(stripe_subscription):
     user = User.query.filter_by(stripe_subscription_id=stripe_subscription['id']).first()
     if user:
         if stripe_subscription['status'] == 'active':
+            # Vérifier si c'est un upgrade (l'utilisateur n'était pas Premium avant)
+            was_premium = user.plan and user.plan.is_premium()
+
             premium_plan = Plan.query.filter_by(name='Premium').first()
             user.plan_id = premium_plan.id
-        db.session.commit()
+
+            # Créer une notification uniquement si c'est un nouveau passage à Premium
+            if not was_premium:
+                notification = Notification(
+                    user_id=user.id,
+                    type='upgrade',
+                    title='Bienvenue sur le plan Premium !',
+                    message='Votre abonnement Premium a été activé. Vous pouvez maintenant ajouter un nombre illimité d\'abonnements.'
+                )
+                db.session.add(notification)
+
+            db.session.commit()
+
+            # Envoyer l'email de confirmation uniquement si c'est un nouveau passage à Premium
+            if not was_premium:
+                from app.utils.email import send_plan_upgrade_email
+                send_plan_upgrade_email(user, premium_plan.name)
 
 
 def handle_subscription_deleted(stripe_subscription):
     user = User.query.filter_by(stripe_subscription_id=stripe_subscription['id']).first()
     if user:
+        # Sauvegarder le nom de l'ancien plan pour l'email
+        old_plan_name = user.plan.name if user.plan else 'Premium'
+
         free_plan = Plan.query.filter_by(name='Free').first()
         user.plan_id = free_plan.id
         user.stripe_subscription_id = None
@@ -155,6 +205,10 @@ def handle_subscription_deleted(stripe_subscription):
         db.session.add(notification)
         db.session.commit()
 
+        # Envoyer l'email de confirmation de rétrogradation
+        from app.utils.email import send_plan_downgrade_email
+        send_plan_downgrade_email(user, old_plan_name)
+
 
 def handle_payment_failed(invoice):
     customer_id = invoice['customer']
@@ -168,6 +222,20 @@ def handle_payment_failed(invoice):
         )
         db.session.add(notification)
         db.session.commit()
+
+
+def handle_invoice_payment_succeeded(invoice):
+    """Envoie la facture par email lorsqu'un paiement réussit"""
+    customer_id = invoice['customer']
+    user = User.query.filter_by(stripe_customer_id=customer_id).first()
+
+    if user:
+        # Envoyer la facture par email
+        try:
+            from app.utils.email import send_invoice_email
+            send_invoice_email(user, invoice['id'])
+        except Exception as e:
+            print(f"Erreur lors de l'envoi de la facture par email : {e}")
 
 
 @bp.route('/stats')
