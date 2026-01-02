@@ -251,3 +251,44 @@ def resend_verification():
         flash('Erreur lors de l\'envoi de l\'email. Veuillez réessayer plus tard.', 'danger')
 
     return redirect(url_for('main.dashboard'))
+
+
+@bp.route('/cancel-plan', methods=['POST'])
+@login_required
+def cancel_plan():
+    """Annule le plan de l'utilisateur à la fin de la période actuelle"""
+    if not current_user.plan or current_user.plan.name == 'Free':
+        flash('Vous êtes déjà sur le plan gratuit.', 'info')
+        return redirect(url_for('auth.profile'))
+
+    # Calculer la date de fin de période (30 jours à partir d'aujourd'hui par défaut)
+    # Dans un vrai système avec Stripe, cette date viendrait de l'API Stripe
+    if current_user.plan.billing_period == 'yearly':
+        period_end = datetime.utcnow() + timedelta(days=365)
+    else:
+        period_end = datetime.utcnow() + timedelta(days=30)
+
+    current_user.plan_cancel_at_period_end = True
+    current_user.plan_period_end_date = period_end
+
+    db.session.commit()
+
+    flash(f'Votre plan sera annulé le {period_end.strftime("%d/%m/%Y")}. Vous conserverez l\'accès Premium jusqu\'à cette date.', 'warning')
+    return redirect(url_for('auth.profile'))
+
+
+@bp.route('/reactivate-plan', methods=['POST'])
+@login_required
+def reactivate_plan():
+    """Réactive le plan de l'utilisateur si l'annulation était programmée"""
+    if not current_user.plan_cancel_at_period_end:
+        flash('Votre plan n\'est pas programmé pour être annulé.', 'info')
+        return redirect(url_for('auth.profile'))
+
+    current_user.plan_cancel_at_period_end = False
+    current_user.plan_period_end_date = None
+
+    db.session.commit()
+
+    flash('Votre plan a été réactivé avec succès ! L\'annulation a été annulée.', 'success')
+    return redirect(url_for('auth.profile'))

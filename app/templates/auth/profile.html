@@ -14,7 +14,7 @@
                     <h5 class="mb-0"><i class="fas fa-crown"></i> Plan actuel</h5>
                 </div>
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
                         <div>
                             <h4>
                                 Plan {{ current_user.plan.name }}
@@ -38,12 +38,56 @@
                                     <i class="fas fa-arrow-up"></i> Passer à Premium
                                 </a>
                             {% else %}
+                                {% if current_user.stripe_customer_id %}
                                 <button class="btn btn-outline-secondary" id="manageSubscription">
                                     <i class="fas fa-cog"></i> Gérer l'abonnement
                                 </button>
+                                {% endif %}
                             {% endif %}
                         </div>
                     </div>
+
+                    {% if current_user.plan and current_user.plan.name != 'Free' %}
+                    <hr>
+
+                    <!-- État de l'abonnement -->
+                    {% if current_user.plan_cancel_at_period_end %}
+                    <div class="alert alert-warning mb-3">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
+                            <div class="flex-grow-1">
+                                <strong>Annulation programmée</strong>
+                                <p class="mb-0 small">
+                                    Votre plan {{ current_user.plan.name }} sera annulé le
+                                    <strong>{{ current_user.plan_period_end_date.strftime('%d/%m/%Y') }}</strong>.
+                                    Vous conserverez l'accès Premium jusqu'à cette date.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form action="{{ url_for('auth.reactivate_plan') }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-undo"></i> Réactiver mon abonnement
+                        </button>
+                    </form>
+                    {% else %}
+                    <!-- Gestion de l'abonnement -->
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted mb-0 small">
+                                <i class="fas fa-info-circle"></i>
+                                Vous pouvez annuler votre abonnement à tout moment. L'annulation prendra effet à la fin de votre période de facturation actuelle.
+                            </p>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#cancelPlanModal">
+                                <i class="fas fa-times-circle"></i> Annuler mon plan
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endif %}
                 </div>
             </div>
 
@@ -135,21 +179,66 @@
     </div>
 </div>
 
+<!-- Modal de confirmation d'annulation -->
+<div class="modal fade" id="cancelPlanModal" tabindex="-1" aria-labelledby="cancelPlanModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="cancelPlanModalLabel">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmer l'annulation
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Êtes-vous sûr de vouloir annuler votre plan {{ current_user.plan.name }} ?</strong></p>
+
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Ce qui va se passer :</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Votre plan restera actif jusqu'à la fin de votre période de facturation actuelle</li>
+                        <li>Vous conserverez tous vos accès Premium jusqu'à cette date</li>
+                        <li>Après cette date, votre compte passera automatiquement au plan gratuit</li>
+                        <li>Vous pourrez réactiver votre abonnement à tout moment avant la fin de période</li>
+                    </ul>
+                </div>
+
+                <p class="text-muted mb-0 small">
+                    Nous serions ravis de connaître la raison de votre départ pour améliorer nos services.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Non, garder mon plan
+                </button>
+                <form action="{{ url_for('auth.cancel_plan') }}" method="POST" class="d-inline">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-check"></i> Oui, annuler mon plan
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% if current_user.stripe_customer_id %}
 <script>
-document.getElementById('manageSubscription').addEventListener('click', async function() {
-    try {
-        const response = await fetch('/api/create-portal-session', {
-            method: 'POST'
-        });
-        const data = await response.json();
-        if (data.portal_url) {
-            window.location.href = data.portal_url;
+const manageBtn = document.getElementById('manageSubscription');
+if (manageBtn) {
+    manageBtn.addEventListener('click', async function() {
+        try {
+            const response = await fetch('/api/create-portal-session', {
+                method: 'POST'
+            });
+            const data = await response.json();
+            if (data.portal_url) {
+                window.location.href = data.portal_url;
+            }
+        } catch (error) {
+            alert('Erreur lors de l\'ouverture du portail de gestion');
         }
-    } catch (error) {
-        alert('Erreur lors de l\'ouverture du portail de gestion');
-    }
-});
+    });
+}
 </script>
 {% endif %}
 {% endblock %}

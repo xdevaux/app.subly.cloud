@@ -136,6 +136,9 @@
                                 <li><h6 class="dropdown-header"><i class="fas fa-cogs"></i> Administration</h6></li>
                                 <li><a class="dropdown-item" href="{{ url_for('admin.dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a></li>
                                 <li><a class="dropdown-item" href="{{ url_for('admin.clients_list') }}"><i class="fas fa-users"></i> Clients</a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('admin.categories_list') }}"><i class="fas fa-folder"></i> Catégories</a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('admin.services_list') }}"><i class="fas fa-cogs"></i> Services</a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('admin.service_plans_list') }}"><i class="fas fa-list-alt"></i> Plans</a></li>
                                 {% endif %}
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt"></i> Déconnexion</a></li>

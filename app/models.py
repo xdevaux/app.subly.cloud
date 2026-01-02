@@ -88,7 +88,7 @@ class User(UserMixin, db.Model):
 
     def can_add_subscription(self):
         """Vérifie si l'utilisateur peut ajouter un abonnement"""
-        if self.plan and self.plan.name == 'Premium':
+        if self.is_premium():
             return True
         return self.subscriptions.filter_by(is_active=True).count() < 5
 
