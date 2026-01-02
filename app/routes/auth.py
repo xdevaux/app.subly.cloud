@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from authlib.integrations.flask_client import OAuth
 from app import db
 from app.models import User, Plan
+from datetime import datetime
 import os
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
@@ -94,14 +95,20 @@ def register():
             email=email,
             first_name=first_name,
             last_name=last_name,
-            plan=free_plan
+            plan=free_plan,
+            trial_start_date=datetime.utcnow()  # Activer la période d'essai Premium de 7 jours
         )
         user.set_password(password)
 
         db.session.add(user)
         db.session.commit()
 
-        flash('Votre compte a été créé avec succès ! Vous pouvez maintenant vous connecter.', 'success')
+        # Envoyer l'email de vérification
+        from app.utils.email import send_verification_email
+        send_verification_email(user)
+        db.session.commit()
+
+        flash('Votre compte a été créé avec succès ! Un email de confirmation a été envoyé à votre adresse. Vous bénéficiez de 7 jours d\'essai Premium gratuit.', 'success')
         return redirect(url_for('auth.login'))
 
     return render_template('auth/register.html')
@@ -141,11 +148,18 @@ def google_callback():
                     avatar_url=user_info.get('picture'),
                     oauth_provider='google',
                     oauth_id=user_info.get('sub'),
-                    plan=free_plan
+                    plan=free_plan,
+                    trial_start_date=datetime.utcnow()  # Activer la période d'essai Premium de 7 jours
                 )
                 db.session.add(user)
                 db.session.commit()
-                flash('Votre compte a été créé avec succès !', 'success')
+
+                # Envoyer l'email de vérification
+                from app.utils.email import send_verification_email
+                send_verification_email(user)
+                db.session.commit()
+
+                flash('Votre compte a été créé avec succès ! Un email de confirmation a été envoyé à votre adresse. Vous bénéficiez de 7 jours d\'essai Premium gratuit.', 'success')
             else:
                 # Mettre à jour les infos OAuth si nécessaire
                 if not user.oauth_provider:
@@ -194,3 +208,46 @@ def profile():
         return redirect(url_for('auth.profile'))
 
     return render_template('auth/profile.html')
+
+
+@bp.route('/verify-email/<token>')
+def verify_email(token):
+    """Vérifie l'email de l'utilisateur via le token"""
+    user = User.query.filter_by(email_verification_token=token).first()
+
+    if not user:
+        flash('Le lien de vérification est invalide ou a expiré.', 'danger')
+        return redirect(url_for('main.index'))
+
+    if user.email_verified:
+        flash('Votre email a déjà été vérifié.', 'info')
+        return redirect(url_for('main.dashboard') if current_user.is_authenticated else url_for('auth.login'))
+
+    user.verify_email()
+    db.session.commit()
+
+    flash('Votre adresse email a été confirmée avec succès ! Vous pouvez maintenant profiter pleinement de Subly Cloud.', 'success')
+
+    if not current_user.is_authenticated:
+        login_user(user)
+
+    return redirect(url_for('main.dashboard'))
+
+
+@bp.route('/resend-verification')
+@login_required
+def resend_verification():
+    """Renvoie un email de vérification"""
+    if current_user.email_verified:
+        flash('Votre email est déjà vérifié.', 'info')
+        return redirect(url_for('main.dashboard'))
+
+    from app.utils.email import send_resend_verification_email
+
+    if send_resend_verification_email(current_user):
+        db.session.commit()
+        flash('Un nouvel email de vérification a été envoyé à votre adresse.', 'success')
+    else:
+        flash('Erreur lors de l\'envoi de l\'email. Veuillez réessayer plus tard.', 'danger')
+
+    return redirect(url_for('main.dashboard'))

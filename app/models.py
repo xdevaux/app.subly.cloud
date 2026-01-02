@@ -2,6 +2,19 @@ from datetime import datetime, timedelta
 from app import db, login_manager
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
+import secrets
+
+
+# Tables d'association pour les éléments masqués
+hidden_categories = db.Table('hidden_categories',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column('category_id', db.Integer, db.ForeignKey('categories.id'), primary_key=True)
+)
+
+hidden_services = db.Table('hidden_services',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column('service_id', db.Integer, db.ForeignKey('services.id'), primary_key=True)
+)
 
 
 @login_manager.user_loader
@@ -35,10 +48,19 @@ class User(UserMixin, db.Model):
     stripe_customer_id = db.Column(db.String(100), nullable=True)
     stripe_subscription_id = db.Column(db.String(100), nullable=True)
 
+    # Email verification
+    email_verified = db.Column(db.Boolean, default=False)
+    email_verification_token = db.Column(db.String(100), nullable=True)
+    email_verified_at = db.Column(db.DateTime, nullable=True)
+
+    # Admin
+    is_admin = db.Column(db.Boolean, default=False)
+
     # Dates
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
+    trial_start_date = db.Column(db.DateTime, nullable=True)  # Date de début de la période d'essai Premium
 
     # Relations
     subscriptions = db.relationship('Subscription', back_populates='user', lazy='dynamic',
@@ -47,6 +69,14 @@ class User(UserMixin, db.Model):
                                    cascade='all, delete-orphan')
     custom_categories = db.relationship('Category', back_populates='user', lazy='dynamic',
                                        cascade='all, delete-orphan')
+    custom_services = db.relationship('Service', back_populates='user', lazy='dynamic',
+                                     cascade='all, delete-orphan')
+    custom_plans = db.relationship('ServicePlan', back_populates='user', lazy='dynamic',
+                                  cascade='all, delete-orphan')
+    hidden_categories_list = db.relationship('Category', secondary=hidden_categories,
+                                            backref=db.backref('hidden_by_users', lazy='dynamic'))
+    hidden_services_list = db.relationship('Service', secondary=hidden_services,
+                                          backref=db.backref('hidden_by_users', lazy='dynamic'))
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -63,8 +93,36 @@ class User(UserMixin, db.Model):
         return self.subscriptions.filter_by(is_active=True).count() < 5
 
     def is_premium(self):
-        """Vérifie si l'utilisateur a un plan Premium (mensuel ou annuel)"""
-        return self.plan and self.plan.is_premium()
+        """Vérifie si l'utilisateur a un plan Premium (mensuel ou annuel) ou est en période d'essai"""
+        # Vérifier si l'utilisateur a un plan Premium payant
+        if self.plan and self.plan.is_premium():
+            return True
+
+        # Vérifier si l'utilisateur est dans la période d'essai de 7 jours
+        if self.trial_start_date:
+            trial_end = self.trial_start_date + timedelta(days=7)
+            if datetime.utcnow() < trial_end:
+                return True
+
+        return False
+
+    def is_on_trial(self):
+        """Vérifie si l'utilisateur est actuellement en période d'essai"""
+        if not self.trial_start_date:
+            return False
+
+        trial_end = self.trial_start_date + timedelta(days=7)
+        # En période d'essai si pas de plan payant ET dans les 7 jours
+        return datetime.utcnow() < trial_end and (not self.plan or not self.plan.is_premium())
+
+    def get_trial_days_remaining(self):
+        """Retourne le nombre de jours restants dans la période d'essai (0 si pas en essai)"""
+        if not self.is_on_trial():
+            return 0
+
+        trial_end = self.trial_start_date + timedelta(days=7)
+        days_remaining = (trial_end - datetime.utcnow()).days
+        return max(0, days_remaining + 1)  # +1 pour inclure le jour actuel
 
     def can_create_custom_category(self):
         """Vérifie si l'utilisateur peut créer des catégories personnalisées
@@ -111,6 +169,25 @@ class User(UserMixin, db.Model):
 
     def get_active_subscriptions_count(self):
         return self.subscriptions.filter_by(is_active=True).count()
+
+    def is_category_hidden(self, category_id):
+        """Vérifie si une catégorie est masquée pour cet utilisateur"""
+        return any(cat.id == category_id for cat in self.hidden_categories_list)
+
+    def is_service_hidden(self, service_id):
+        """Vérifie si un service est masqué pour cet utilisateur"""
+        return any(svc.id == service_id for svc in self.hidden_services_list)
+
+    def generate_verification_token(self):
+        """Génère un nouveau token de vérification d'email"""
+        self.email_verification_token = secrets.token_urlsafe(32)
+        return self.email_verification_token
+
+    def verify_email(self):
+        """Marque l'email comme vérifié"""
+        self.email_verified = True
+        self.email_verified_at = datetime.utcnow()
+        self.email_verification_token = None
 
     def __repr__(self):
         return f'<User {self.email}>'
@@ -187,7 +264,7 @@ class Service(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relations
-    user = db.relationship('User', backref='custom_services')
+    user = db.relationship('User', back_populates='custom_services')
     category = db.relationship('Category', backref='services')
     plans = db.relationship('ServicePlan', back_populates='service', cascade='all, delete-orphan')
     subscriptions = db.relationship('Subscription', back_populates='service')
@@ -222,7 +299,7 @@ class ServicePlan(db.Model):
 
     # Relations
     service = db.relationship('Service', back_populates='plans')
-    user = db.relationship('User', backref='custom_plans')
+    user = db.relationship('User', back_populates='custom_plans')
 
     def is_custom(self):
         """Vérifie si le plan est personnalisé (créé par un utilisateur)"""

@@ -278,9 +278,24 @@
                         {% endif %}
 
                         {% if category.website_url %}
-                        <a href="{{ category.website_url }}" target="_blank" class="btn btn-sm btn-outline-primary w-100">
+                        <a href="{{ category.website_url }}" target="_blank" class="btn btn-sm btn-outline-primary w-100 mb-2">
                             <i class="fas fa-external-link-alt"></i> Visiter le site
                         </a>
+                        {% endif %}
+
+                        {% if current_user.is_premium() %}
+                        <div class="btn-group w-100">
+                            <form method="POST" action="{{ url_for('categories.customize', category_id=category.id) }}" class="flex-fill">
+                                <button type="submit" class="btn btn-sm btn-outline-warning w-100">
+                                    <i class="fas fa-edit"></i> Personnaliser
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('categories.hide', category_id=category.id) }}" class="flex-fill" onsubmit="return confirm('Masquer cette catégorie ?')">
+                                <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                                    <i class="fas fa-eye-slash"></i> Masquer
+                                </button>
+                            </form>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
@@ -329,11 +344,25 @@
                                     </span>
                                 </td>
                                 <td class="text-end">
-                                    {% if category.website_url %}
-                                    <a href="{{ category.website_url }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Visiter le site">
-                                        <i class="fas fa-external-link-alt"></i>
-                                    </a>
-                                    {% endif %}
+                                    <div class="btn-group">
+                                        {% if category.website_url %}
+                                        <a href="{{ category.website_url }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Visiter le site">
+                                            <i class="fas fa-external-link-alt"></i>
+                                        </a>
+                                        {% endif %}
+                                        {% if current_user.is_premium() %}
+                                        <form method="POST" action="{{ url_for('categories.customize', category_id=category.id) }}" class="d-inline">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning" title="Personnaliser cette catégorie">
+                                                <i class="fas fa-edit"></i> Personnaliser
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{{ url_for('categories.hide', category_id=category.id) }}" class="d-inline" onsubmit="return confirm('Masquer cette catégorie ?')">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Masquer cette catégorie">
+                                                <i class="fas fa-eye-slash"></i>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}

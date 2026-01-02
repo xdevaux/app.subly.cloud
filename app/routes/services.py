@@ -16,22 +16,30 @@ def allowed_file(filename):
 
 def get_user_services():
     """Récupère les services globaux et personnalisés de l'utilisateur actuel"""
-    # Services globaux (par défaut)
-    global_services = Service.query.filter_by(user_id=None).order_by(Service.name).all()
+    # Services globaux (par défaut) - non masqués
+    all_global_services = Service.query.filter_by(user_id=None).order_by(Service.name).all()
 
     # Services personnalisés de l'utilisateur
     if current_user.is_authenticated:
+        # Filtrer les services masqués
+        hidden_ids = [svc.id for svc in current_user.hidden_services_list]
+        global_services = [svc for svc in all_global_services if svc.id not in hidden_ids]
+
         custom_services = Service.query.filter_by(user_id=current_user.id).order_by(Service.name).all()
         return global_services + custom_services
 
-    return global_services
+    return all_global_services
 
 
 @bp.route('/')
 @login_required
 def list():
-    # Services globaux
-    global_services = Service.query.filter_by(user_id=None, is_active=True).order_by(Service.name).all()
+    # Services globaux - non masqués
+    all_global_services = Service.query.filter_by(user_id=None, is_active=True).order_by(Service.name).all()
+
+    # Filtrer les services masqués par l'utilisateur
+    hidden_ids = [svc.id for svc in current_user.hidden_services_list]
+    global_services = [svc for svc in all_global_services if svc.id not in hidden_ids]
 
     # Services personnalisés de l'utilisateur
     custom_services = Service.query.filter_by(user_id=current_user.id).order_by(Service.name).all()
@@ -284,3 +292,111 @@ def delete_plan(plan_id):
 
     flash(f'La formule "{plan_name}" a été supprimée.', 'success')
     return redirect(url_for('services.plans', service_id=service_id))
+
+
+@bp.route('/<int:service_id>/customize', methods=['POST'])
+@login_required
+def customize(service_id):
+    """Dupliquer un service global pour le personnaliser"""
+    # Vérifier que l'utilisateur est Premium
+    if not current_user.is_premium():
+        flash('La personnalisation des services est réservée aux utilisateurs Premium.', 'warning')
+        return redirect(url_for('main.pricing'))
+
+    # Récupérer le service global
+    global_service = Service.query.get_or_404(service_id)
+
+    # Vérifier que c'est bien un service global
+    if not global_service.is_global():
+        flash('Seuls les services par défaut peuvent être personnalisés.', 'danger')
+        return redirect(url_for('services.list'))
+
+    # Vérifier si l'utilisateur a déjà un service avec ce nom
+    existing = Service.query.filter_by(user_id=current_user.id, name=global_service.name).first()
+    if existing:
+        flash(f'Vous avez déjà un service nommé "{global_service.name}". Modifiez-le directement.', 'warning')
+        return redirect(url_for('services.edit', service_id=existing.id))
+
+    # Créer une copie personnalisée du service
+    custom_service = Service(
+        user_id=current_user.id,
+        category_id=global_service.category_id,
+        name=global_service.name,
+        description=global_service.description,
+        logo_url=global_service.logo_url,
+        website_url=global_service.website_url,
+        is_active=True
+    )
+
+    db.session.add(custom_service)
+    db.session.flush()  # Pour obtenir l'ID du nouveau service
+
+    # Copier tous les plans du service global
+    for global_plan in global_service.plans:
+        custom_plan = ServicePlan(
+            service_id=custom_service.id,
+            user_id=current_user.id,
+            name=global_plan.name,
+            description=global_plan.description,
+            amount=global_plan.amount,
+            currency=global_plan.currency,
+            billing_cycle=global_plan.billing_cycle,
+            is_active=global_plan.is_active
+        )
+        db.session.add(custom_plan)
+
+    db.session.commit()
+
+    flash(f'Le service "{global_service.name}" et ses formules ont été dupliqués. Vous pouvez maintenant les personnaliser.', 'success')
+    return redirect(url_for('services.edit', service_id=custom_service.id))
+
+
+@bp.route('/<int:service_id>/hide', methods=['POST'])
+@login_required
+def hide(service_id):
+    """Masquer un service global"""
+    # Vérifier que l'utilisateur est Premium
+    if not current_user.is_premium():
+        flash('Le masquage des services est réservé aux utilisateurs Premium.', 'warning')
+        return redirect(url_for('main.pricing'))
+
+    # Récupérer le service
+    service = Service.query.get_or_404(service_id)
+
+    # Vérifier que c'est bien un service global
+    if not service.is_global():
+        flash('Seuls les services par défaut peuvent être masqués.', 'danger')
+        return redirect(url_for('services.list'))
+
+    # Ajouter à la liste des services masqués
+    if service not in current_user.hidden_services_list:
+        current_user.hidden_services_list.append(service)
+        db.session.commit()
+        flash(f'Le service "{service.name}" a été masqué.', 'success')
+    else:
+        flash(f'Le service "{service.name}" est déjà masqué.', 'info')
+
+    return redirect(url_for('services.list'))
+
+
+@bp.route('/<int:service_id>/unhide', methods=['POST'])
+@login_required
+def unhide(service_id):
+    """Afficher un service global masqué"""
+    # Vérifier que l'utilisateur est Premium
+    if not current_user.is_premium():
+        flash('La gestion des services masqués est réservée aux utilisateurs Premium.', 'warning')
+        return redirect(url_for('main.pricing'))
+
+    # Récupérer le service
+    service = Service.query.get_or_404(service_id)
+
+    # Retirer de la liste des services masqués
+    if service in current_user.hidden_services_list:
+        current_user.hidden_services_list.remove(service)
+        db.session.commit()
+        flash(f'Le service "{service.name}" est de nouveau visible.', 'success')
+    else:
+        flash(f'Le service "{service.name}" n\'était pas masqué.', 'info')
+
+    return redirect(url_for('services.list'))

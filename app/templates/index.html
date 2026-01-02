@@ -12,8 +12,11 @@
                 Subly Cloud vous aide à suivre, organiser et optimiser vos abonnements mensuels.
                 Économisez du temps et de l'argent en ayant une vue d'ensemble de toutes vos dépenses récurrentes.
             </p>
+            <div class="alert alert-success d-inline-block mb-4" role="alert">
+                <i class="fas fa-gift"></i> <strong>Offre de lancement :</strong> 7 jours d'essai Premium gratuit pour tous les nouveaux inscrits !
+            </div>
             <div class="d-flex gap-3">
-                <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-lg">
+                <a href="{{ url_for('main.pricing') }}" class="btn btn-primary btn-lg">
                     <i class="fas fa-rocket"></i> Commencer gratuitement
                 </a>
                 <a href="{{ url_for('main.pricing') }}" class="btn btn-outline-secondary btn-lg">
@@ -116,7 +119,7 @@
                     Commencez gratuitement avec jusqu'à 5 abonnements. Aucune carte bancaire requise.
                 </p>
                 <div>
-                    <a href="{{ url_for('auth.register') }}" class="btn btn-light btn-lg">
+                    <a href="{{ url_for('main.pricing') }}" class="btn btn-light btn-lg">
                         <i class="fas fa-rocket"></i> Créer mon compte gratuit
                     </a>
                 </div>

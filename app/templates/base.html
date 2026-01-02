@@ -131,6 +131,12 @@
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li><a class="dropdown-item" href="{{ url_for('auth.profile') }}"><i class="fas fa-user"></i> Mon profil</a></li>
                                 <li><a class="dropdown-item" href="{{ url_for('main.pricing') }}"><i class="fas fa-crown"></i> Plans & Tarifs</a></li>
+                                {% if current_user.is_admin %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><h6 class="dropdown-header"><i class="fas fa-cogs"></i> Administration</h6></li>
+                                <li><a class="dropdown-item" href="{{ url_for('admin.dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('admin.clients_list') }}"><i class="fas fa-users"></i> Clients</a></li>
+                                {% endif %}
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt"></i> Déconnexion</a></li>
                             </ul>
@@ -161,6 +167,18 @@
             </div>
         </div>
     </nav>
+
+    <!-- Email Verification Banner -->
+    {% if current_user.is_authenticated and not current_user.email_verified %}
+    <div class="alert alert-warning mb-0 text-center" role="alert" style="border-radius: 0;">
+        <div class="container">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>Veuillez confirmer votre adresse email</strong> pour accéder à toutes les fonctionnalités.
+            Un email de confirmation a été envoyé à <strong>{{ current_user.email }}</strong>.
+            <a href="{{ url_for('auth.resend_verification') }}" class="alert-link">Renvoyer l'email</a>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Flash Messages -->
     <div class="container">
@@ -193,7 +211,7 @@
     <!-- Footer -->
     <footer class="bg-white mt-5 py-4 border-top">
         <div class="container text-center text-muted">
-            <p class="mb-0">&copy; 2025 Subly Cloud. Tous droits réservés.</p>
+            <p class="mb-0">&copy; {{ current_year }} Subly Cloud. Tous droits réservés.</p>
             <p class="mb-0 small">Gérez vos abonnements en toute simplicité</p>
         </div>
     </footer>
