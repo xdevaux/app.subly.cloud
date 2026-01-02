@@ -28,11 +28,10 @@ def dashboard():
         for sub in active_subscriptions
     )
 
-    # Prochains renouvellements
+    # Prochains renouvellements - tous les abonnements actifs triés par date
     upcoming_renewals = current_user.subscriptions.filter(
-        Subscription.is_active == True,
-        Subscription.next_billing_date <= datetime.utcnow().date() + timedelta(days=7)
-    ).order_by(Subscription.next_billing_date).limit(5).all()
+        Subscription.is_active == True
+    ).order_by(Subscription.next_billing_date).all()
 
     # Répartition par catégorie
     category_stats = db.session.query(
@@ -53,7 +52,8 @@ def dashboard():
                          total_monthly_cost=round(total_monthly_cost, 2),
                          upcoming_renewals=upcoming_renewals,
                          category_stats=category_stats,
-                         unread_notifications=unread_notifications)
+                         unread_notifications=unread_notifications,
+                         now=datetime.utcnow())
 
 
 @bp.route('/pricing')

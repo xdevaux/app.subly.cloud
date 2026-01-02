@@ -92,37 +92,57 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="fas fa-calendar-alt"></i> Prochains renouvellements</h5>
-                </div>
-                <div class="card-body">
                     {% if upcoming_renewals %}
-                        <div class="list-group list-group-flush">
+                        <span class="badge bg-primary">{{ upcoming_renewals|length }}</span>
+                    {% endif %}
+                </div>
+                <div class="card-body p-0">
+                    {% if upcoming_renewals %}
+                        <div class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
                             {% for sub in upcoming_renewals %}
-                                <div class="list-group-item subscription-item">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <h6 class="mb-1">{{ sub.name }}</h6>
-                                            <small class="text-muted">
-                                                <i class="fas fa-calendar"></i>
-                                                {{ sub.next_billing_date.strftime('%d/%m/%Y') }}
+                                {% set days_until = (sub.next_billing_date - now.date()).days %}
+                                <div class="list-group-item subscription-item py-2 {% if days_until <= 7 %}border-start border-warning border-3{% endif %}">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="flex-shrink-0">
+                                            <small class="{% if days_until <= 7 %}text-warning fw-bold{% else %}text-muted{% endif %}">
+                                                <i class="fas fa-calendar"></i> {{ sub.next_billing_date.strftime('%d/%m/%Y') }}
                                             </small>
                                         </div>
-                                        <div class="text-end">
-                                            <strong>{{ sub.amount | format_amount }} {{ sub.currency | currency_symbol }}</strong>
-                                            <br>
-                                            <small class="badge bg-secondary">{{ sub.billing_cycle | translate_cycle }}</small>
+                                        <div class="flex-grow-1 text-start" style="min-width: 0;">
+                                            <strong class="text-truncate d-inline-block" style="max-width: 100%;" title="{{ sub.name }}">{{ sub.name }}</strong>
+                                        </div>
+                                        <div class="flex-shrink-0">
+                                            {% if days_until == 0 %}
+                                                <span class="badge bg-danger">Aujourd'hui</span>
+                                            {% elif days_until == 1 %}
+                                                <span class="badge bg-warning text-dark">Demain</span>
+                                            {% elif days_until > 0 and days_until <= 7 %}
+                                                <span class="badge bg-warning text-dark">{{ days_until }}j</span>
+                                            {% elif days_until < 0 %}
+                                                <span class="badge bg-danger">Retard</span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="flex-shrink-0 text-end">
+                                            <strong class="me-1">{{ sub.amount | format_amount }} {{ sub.currency | currency_symbol }}</strong>
+                                            <span class="badge bg-secondary">{{ sub.billing_cycle | translate_cycle }}</span>
                                         </div>
                                     </div>
                                 </div>
                             {% endfor %}
                         </div>
+                        <div class="card-footer bg-white text-center">
+                            <a href="{{ url_for('subscriptions.list') }}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-list"></i> Voir tous les abonnements
+                            </a>
+                        </div>
                     {% else %}
-                        <p class="text-muted text-center py-4">Aucun renouvellement à venir</p>
+                        <div class="card-body">
+                            <p class="text-muted text-center py-4 mb-0">
+                                <i class="fas fa-inbox fa-3x d-block mb-2"></i>
+                                Aucun abonnement actif
+                            </p>
+                        </div>
                     {% endif %}
-                    <div class="text-center mt-3">
-                        <a href="{{ url_for('subscriptions.list') }}" class="btn btn-sm btn-outline-primary">
-                            Voir tous les abonnements
-                        </a>
-                    </div>
                 </div>
             </div>
         </div>
